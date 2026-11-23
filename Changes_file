@@ -1,0 +1,611 @@
+Step 2: Load your raw data
+In the first cell:
+
+
+
+
+
+
+import pandas as pd
+import numpy as np
+
+# Load your actual input data
+df = pd.read_csv(
+    "data/input_data/your_input_file.csv"
+)
+
+print("Shape:", df.shape)
+print("Columns:", df.columns.tolist())
+
+display(df.head())
+
+
+
+
+
+
+
+
+
+Step 3: Validate the input columns
+In the second cell:
+
+
+
+
+
+
+
+required_columns = [
+    "Closing Date",
+    "Customer Nature",
+    "Product",
+    "RMPM ID (Principal restitution party)",
+    "Corporate name (Principal restitution party)",
+    "Amount in K EUR",
+    "Balance Type",
+    "Impairment type (final stage) - R",
+    "CTM (Owner) - R"
+]
+
+missing = [
+    col for col in required_columns
+    if col not in df.columns
+]
+
+if missing:
+    print("Missing columns:", missing)
+else:
+    print("All required columns available")
+
+print("\nReporting dates:")
+print(sorted(pd.to_datetime(
+    df["Closing Date"]
+).dropna().unique()))
+
+print("\nBalance Types:")
+print(df["Balance Type"].value_counts(dropna=False))
+
+print("\nSTG classifications:")
+print(df["Impairment type (final stage) - R"]
+      .value_counts(dropna=False).head(10))
+
+print("\nCTM classifications:")
+print(df["CTM (Owner) - R"]
+      .value_counts(dropna=False).head(10))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Step 4: Test the STG table
+Once you have created reporting/exposure_comparison.py, run:
+
+
+
+
+
+
+
+
+
+
+
+
+from reporting.exposure_comparison import (
+    create_quarterly_exposure_comparison
+)
+
+stg_df = create_quarterly_exposure_comparison(
+    df=df,
+    classification_col="Impairment type (final stage) - R"
+)
+
+display(stg_df.head(20))
+
+print("STG Shape:", stg_df.shape)
+print("STG Columns:", stg_df.columns.tolist())
+
+
+
+
+
+
+
+
+
+
+
+
+Step 5: Test the CTM table
+In a separate cell:
+
+
+
+
+
+
+
+
+
+ctm_df = create_quarterly_exposure_comparison(
+    df=df,
+    classification_col="CTM (Owner) - R"
+)
+
+display(ctm_df.head(20))
+
+print("CTM Shape:", ctm_df.shape)
+print("CTM Columns:", ctm_df.columns.tolist())
+
+
+
+
+
+
+
+
+
+
+
+
+
+Step 6: Validate the financial calculations
+
+
+
+
+
+
+
+
+
+
+# 1. Validate table dimensions
+assert stg_df.shape[1] == 12
+assert ctm_df.shape[1] == 12
+
+# 2. Validate Carrying Amount calculation
+assert np.allclose(
+    stg_df["Current Carrying Amount"],
+    stg_df["Current Gross Value"]
+    + stg_df["Current Impairment"]
+)
+
+assert np.allclose(
+    stg_df["Previous Carrying Amount"],
+    stg_df["Previous Gross Value"]
+    + stg_df["Previous Impairment"]
+)
+
+assert np.allclose(
+    ctm_df["Current Carrying Amount"],
+    ctm_df["Current Gross Value"]
+    + ctm_df["Current Impairment"]
+)
+
+assert np.allclose(
+    ctm_df["Previous Carrying Amount"],
+    ctm_df["Previous Gross Value"]
+    + ctm_df["Previous Impairment"]
+)
+
+print("All Carrying Amount calculations PASSED")
+
+
+
+
+
+
+
+
+
+
+Also check whether the table has duplicate index combinations:
+
+
+
+
+
+
+
+
+
+
+
+index_columns = [
+    "Customer Nature",
+    "Product",
+    "RMPM ID (Principal restitution party)",
+    "Corporate name (Principal restitution party)"
+]
+
+print("STG duplicate rows:",
+      stg_df.duplicated(index_columns).sum())
+
+print("CTM duplicate rows:",
+      ctm_df.duplicated(index_columns).sum())
+
+
+
+
+
+
+
+
+
+Step 7: Reconcile against raw data
+We should also validate the total amounts independently.
+
+
+
+
+
+
+
+
+
+check_df = df.copy()
+
+check_df["Closing Date"] = pd.to_datetime(
+    check_df["Closing Date"]
+)
+
+check_df["Amount in K EUR"] = pd.to_numeric(
+    check_df["Amount in K EUR"],
+    errors="coerce"
+)
+
+print("RAW DATA TOTALS")
+
+print(
+    check_df.groupby(
+        ["Closing Date", "Balance Type"]
+    )["Amount in K EUR"].sum()
+)
+
+print("\nSTG REPORT TOTALS")
+
+print(
+    stg_df[
+        [
+            "Current Gross Value",
+            "Current Impairment",
+            "Previous Gross Value",
+            "Previous Impairment"
+        ]
+    ].sum()
+)
+
+print("\nCTM REPORT TOTALS")
+
+print(
+    ctm_df[
+        [
+            "Current Gross Value",
+            "Current Impairment",
+            "Previous Gross Value",
+            "Previous Impairment"
+        ]
+    ].sum()
+)
+
+
+
+
+
+
+
+
+
+
+
+Phase 2 – Create the reporting runner
+Once the notebook tests pass, create:
+reporting/report_runner.py
+This file will execute both reports together.
+
+
+
+
+
+
+
+
+
+from reporting.exposure_comparison import (
+    create_quarterly_exposure_comparison
+)
+
+
+def run_exposure_reporting(df):
+
+    # STG reporting
+    stg_df = create_quarterly_exposure_comparison(
+        df=df,
+        classification_col=(
+            "Impairment type (final stage) - R"
+        )
+    )
+
+    # CTM reporting
+    ctm_df = create_quarterly_exposure_comparison(
+        df=df,
+        classification_col="CTM (Owner) - R"
+    )
+
+    return {
+        "stg_exposure": stg_df,
+        "ctm_exposure": ctm_df,
+        "status": "COMPLETED"
+    }
+
+
+
+
+
+
+
+
+
+
+
+Now test the runner in Jupyter:
+
+
+
+
+
+
+
+
+
+from reporting.report_runner import run_exposure_reporting
+
+report_result = run_exposure_reporting(df)
+
+print(report_result["status"])
+
+display(report_result["stg_exposure"].head())
+display(report_result["ctm_exposure"].head())
+
+
+
+
+
+
+
+
+
+
+
+
+
+Phase 3 – Add automated testing
+Create:
+tests/test_exposure_comparison.py
+Use a small controlled dataset first. This is better than relying entirely on your large production dataset.
+
+
+
+
+
+
+
+
+
+
+
+
+import pandas as pd
+
+from reporting.exposure_comparison import (
+    create_quarterly_exposure_comparison
+)
+
+
+def sample_data():
+
+    return pd.DataFrame({
+        "Closing Date": [
+            "2026-06-30",
+            "2026-06-30",
+            "2026-09-30",
+            "2026-09-30"
+        ],
+
+        "Customer Nature": [
+            "Loans to customers",
+            "Loans to customers",
+            "Loans to customers",
+            "Loans to customers"
+        ],
+
+        "Product": [
+            "Loans", "Loans", "Loans", "Loans"
+        ],
+
+        "RMPM ID (Principal restitution party)": [
+            "123", "123", "123", "123"
+        ],
+
+        "Corporate name (Principal restitution party)": [
+            "ABC Bank", "ABC Bank", "ABC Bank", "ABC Bank"
+        ],
+
+        "Balance Type": [
+            "Gross value",
+            "Impairment",
+            "Gross value",
+            "Impairment"
+        ],
+
+        "Amount in K EUR": [
+            100, -5, 120, -10
+        ],
+
+        "Impairment type (final stage) - R": [
+            "1", "1", "2", "2"
+        ],
+
+        "CTM (Owner) - R": [
+            "CTM510", "CTM510", "CTM300", "CTM300"
+        ]
+    })
+
+
+def test_stg_calculation():
+
+    df = sample_data()
+
+    result = create_quarterly_exposure_comparison(
+        df,
+        "Impairment type (final stage) - R"
+    )
+
+    assert len(result) == 1
+
+    assert result.iloc[0]["Current Gross Value"] == 120
+    assert result.iloc[0]["Current Impairment"] == -10
+    assert result.iloc[0]["Current Carrying Amount"] == 110
+
+    assert result.iloc[0]["Previous Gross Value"] == 100
+    assert result.iloc[0]["Previous Impairment"] == -5
+    assert result.iloc[0]["Previous Carrying Amount"] == 95
+
+    assert result.iloc[0][
+        "Current Impairment type (final stage) - R"
+    ] == "2"
+
+
+def test_ctm_calculation():
+
+    df = sample_data()
+
+    result = create_quarterly_exposure_comparison(
+        df,
+        "CTM (Owner) - R"
+    )
+
+    assert len(result) == 1
+
+    assert result.iloc[0]["Current Carrying Amount"] == 110
+
+    assert result.iloc[0]["Previous Carrying Amount"] == 95
+
+    assert result.iloc[0]["Current CTM (Owner) - R"] == "CTM300"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Run from the VS Code terminal, from the project root:
+
+
+
+
+
+
+
+
+
+
+python -m pytest tests/test_exposure_comparison.py -v
+
+
+
+
+
+
+
+
+from reporting.report_runner import run_exposure_reporting
+
+
+
+
+
+
+
+
+
+
+
+exposure_results = run_exposure_reporting(merged_df)
+
+stg_exposure_df = exposure_results["stg_exposure"]
+
+ctm_exposure_df = exposure_results["ctm_exposure"]
+
+
+
+
+
+
+
+
+st.divider()
+
+st.subheader("Quarterly Exposure Comparison")
+
+st.dataframe(
+    stg_exposure_df,
+    use_container_width=True,
+    hide_index=True
+)
+
+
+
+
+
+
+
+
+
+Inside the existing CTM tab, append:
+
+
+
+
+
+
+
+st.divider()
+
+st.subheader("Quarterly Exposure Comparison")
+
+st.dataframe(
+    ctm_exposure_df,
+    use_container_width=True,
+    hide_index=True
+)
+
+
+
+
+
+
+
+
+
+
+
