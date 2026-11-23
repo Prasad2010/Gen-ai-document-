@@ -609,3 +609,236 @@ st.dataframe(
 
 
 
+
+
+
+
+
+
+
+
+
+
+import pandas as pd
+
+
+def create_quarterly_exposure_comparison(
+    df: pd.DataFrame,
+    classification_col: str,
+    date_col: str = "Closing Date",
+    amount_col: str = "Amount in K EUR",
+    balance_type_col: str = "Balance Type"
+) -> pd.DataFrame:
+    """
+    Creates a quarterly exposure comparison.
+
+    Classification column is configurable:
+        STG: Impairment type (final stage) - R
+        CTM: CTM (Owner) - R
+
+    Index:
+        Customer Nature
+        Product
+        RMPM ID
+        Corporate Name
+
+    Carrying Amount = Gross Value + Impairment
+    """
+
+    dimensions = [
+        "Customer Nature",
+        "Product",
+        "RMPM ID (Principal restitution party)",
+        "Corporate name (Principal restitution party)"
+    ]
+
+    required_cols = (
+        dimensions
+        + [
+            classification_col,
+            date_col,
+            amount_col,
+            balance_type_col
+        ]
+    )
+
+    # STEP 1: Validate input
+    missing_cols = [
+        col for col in required_cols
+        if col not in df.columns
+    ]
+
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {missing_cols}"
+        )
+
+    data = df.copy()
+
+    # STEP 2: Identify reporting quarters
+    data[date_col] = pd.to_datetime(
+        data[date_col], errors="coerce"
+    )
+
+    if data[date_col].isna().any():
+        raise ValueError("Invalid Closing Date values found.")
+
+    dates = sorted(data[date_col].unique())
+
+    if len(dates) != 2:
+        raise ValueError(
+            f"Expected 2 unique reporting dates, found {len(dates)}"
+        )
+
+    previous_date = dates[0]
+    current_date = dates[1]
+
+    # STEP 3: Standardise Balance Type
+    data["_balance_type"] = (
+        data[balance_type_col]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .map({
+            "gross value": "Gross Value",
+            "impairment": "Impairment",
+            "impairments": "Impairment"
+        })
+    )
+
+    data = data[
+        data["_balance_type"].notna()
+    ].copy()
+
+    # STEP 4: Validate financial amounts
+    data[amount_col] = pd.to_numeric(
+        data[amount_col], errors="coerce"
+    )
+
+    if data[amount_col].isna().any():
+        raise ValueError(
+            "Invalid financial amounts found."
+        )
+
+    # STEP 5: Create financial pivot
+    financial = (
+        data.groupby(
+            dimensions + [date_col, "_balance_type"],
+            dropna=False
+        )[amount_col]
+        .sum()
+        .unstack([date_col, "_balance_type"])
+    )
+
+    expected_columns = pd.MultiIndex.from_product(
+        [
+            dates,
+            ["Gross Value", "Impairment"]
+        ]
+    )
+
+    financial = financial.reindex(
+        columns=expected_columns
+    ).fillna(0)
+
+    # STEP 6: Derive Carrying Amount
+    for period in dates:
+        financial[(period, "Carrying Amount")] = (
+            financial[(period, "Gross Value")]
+            + financial[(period, "Impairment")]
+        )
+
+    # STEP 7: Retrieve dynamic classification
+    def get_classification(series):
+
+        values = (
+            series.dropna()
+            .astype(str)
+            .unique()
+        )
+
+        if len(values) > 1:
+            raise ValueError(
+                f"Multiple values found in "
+                f"{classification_col}: {values.tolist()}"
+            )
+
+        return values[0] if len(values) == 1 else None
+
+    classification = (
+        data.groupby(
+            dimensions + [date_col],
+            dropna=False
+        )[classification_col]
+        .agg(get_classification)
+        .unstack(date_col)
+        .reindex(columns=dates)
+    )
+
+    # STEP 8: Construct final table
+    result = pd.DataFrame(index=financial.index)
+
+    result[f"Current {classification_col}"] = (
+        classification[current_date]
+    )
+
+    result[f"Previous {classification_col}"] = (
+        classification[previous_date]
+    )
+
+    # Current quarter
+    for measure in [
+        "Gross Value",
+        "Impairment",
+        "Carrying Amount"
+    ]:
+        result[f"Current {measure}"] = (
+            financial[(current_date, measure)]
+        )
+
+    # Previous quarter
+    for measure in [
+        "Gross Value",
+        "Impairment",
+        "Carrying Amount"
+    ]:
+        result[f"Previous {measure}"] = (
+            financial[(previous_date, measure)]
+        )
+
+    result = result.reset_index()
+
+    # STEP 9: Arrange output columns
+    final_columns = (
+        dimensions
+        + [
+            f"Current {classification_col}",
+            f"Previous {classification_col}",
+            "Current Gross Value",
+            "Current Impairment",
+            "Current Carrying Amount",
+            "Previous Gross Value",
+            "Previous Impairment",
+            "Previous Carrying Amount"
+        ]
+    )
+
+    result = result[final_columns]
+
+    result.attrs["current_date"] = str(
+        pd.Timestamp(current_date).date()
+    )
+
+    result.attrs["previous_date"] = str(
+        pd.Timestamp(previous_date).date()
+    )
+
+    result.attrs["currency_unit"] = "K EUR"
+
+    return result
+
+
+
+
+
+
