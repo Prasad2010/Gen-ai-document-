@@ -2,6 +2,7 @@
 import pandas as pd
 
 
+
 def test_exposure_reporting_tab(df):
 
     print("=" * 65)
