@@ -276,3 +276,22 @@ print(ctm_report.head())
 
 
 
+
+
+
+
+
+
+
+
+
+print("\n===== DEBUG: FINAL RESULT KEYS =====")
+
+for key, value in final_result.items():
+    print(f"\nKey: {key}")
+    print(f"Type: {type(value)}")
+
+    if isinstance(value, dict):
+        print("Nested keys:", list(value.keys()))
+
+
