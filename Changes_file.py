@@ -240,3 +240,39 @@ with ctm_tab:
 
 
 
+
+
+
+
+
+
+# ==========================================
+# EXPOSURE REPORTING MODULE
+# ==========================================
+
+exposure_results = generate_exposure_reports(df)
+
+stg_report = exposure_results["stg_report"]
+ctm_report = exposure_results["ctm_report"]
+
+print("\n===== EXPOSURE REPORTING =====")
+
+print("Current quarter:",
+      exposure_results["current_date"])
+
+print("Previous quarter:",
+      exposure_results["previous_date"])
+
+print("STG report rows:", len(stg_report))
+print("CTM report rows:", len(ctm_report))
+
+print("\nSTG REPORT")
+print(stg_report.head())
+
+print("\nCTM REPORT")
+print(ctm_report.head())
+
+
+
+
+
