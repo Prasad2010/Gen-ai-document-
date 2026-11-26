@@ -1,23 +1,21 @@
-# Prepare STG report for exposure reporting
+# Prepare STG report index for column lookup
+stg_report = stg_report.copy()
 
-stg_exposure_df = stg_report.copy()
+if isinstance(stg_report.index, pd.MultiIndex):
 
-# Assign meaningful names to the four index levels
-stg_exposure_df.index.names = [
-    "Customer Nature",
-    "Product",
-    "RMPM ID",
-    "Corporate Name"
-]
+    expected_index_names = [
+        "Customer Nature",
+        "Product",
+        "RMPM ID",
+        "Corporate Name"
+    ]
 
-# Convert MultiIndex into regular columns
-stg_exposure_df = stg_exposure_df.reset_index()
+    current_names = list(stg_report.index.names)
 
-# Remove blank corporate names
-stg_exposure_df = stg_exposure_df[
-    stg_exposure_df["Corporate Name"].notna()
-]
+    if len(current_names) == 4:
+        stg_report.index = stg_report.index.set_names([
+            current_names[i] or expected_index_names[i]
+            for i in range(4)
+        ])
 
-st.write("STG Exposure Report Shape:", stg_exposure_df.shape)
-
-st.dataframe(stg_exposure_df.head(10))
+    stg_report = stg_report.reset_index()
