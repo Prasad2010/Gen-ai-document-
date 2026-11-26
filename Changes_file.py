@@ -1,9 +1,12 @@
-# DEBUG: Inspect original raw data
-raw_data = final_result.get("raw_data")
+st.write("===== STG REPORT DIAGNOSTICS =====")
 
-if isinstance(raw_data, pd.DataFrame):
-    st.write("RAW DATA SHAPE:", raw_data.shape)
-    st.write("RAW DATA COLUMNS:", list(raw_data.columns))
-    st.dataframe(raw_data.head(5))
-else:
-    st.write("Raw data is not a DataFrame")
+st.write("STG shape:", stg_report.shape)
+st.write("STG index:", stg_report.index[:5].tolist())
+st.write("STG first 5 rows:")
+st.dataframe(stg_report.head())
+
+st.write("===== RAW DATA DIAGNOSTICS =====")
+
+st.write("RAW index:", raw_data.index[:5].tolist())
+st.write("RAW first 5 rows:")
+st.dataframe(raw_data.head())
