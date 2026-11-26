@@ -1,12 +1,23 @@
-st.write("===== STG REPORT DIAGNOSTICS =====")
+# Prepare STG report for exposure reporting
 
-st.write("STG shape:", stg_report.shape)
-st.write("STG index:", stg_report.index[:5].tolist())
-st.write("STG first 5 rows:")
-st.dataframe(stg_report.head())
+stg_exposure_df = stg_report.copy()
 
-st.write("===== RAW DATA DIAGNOSTICS =====")
+# Assign meaningful names to the four index levels
+stg_exposure_df.index.names = [
+    "Customer Nature",
+    "Product",
+    "RMPM ID",
+    "Corporate Name"
+]
 
-st.write("RAW index:", raw_data.index[:5].tolist())
-st.write("RAW first 5 rows:")
-st.dataframe(raw_data.head())
+# Convert MultiIndex into regular columns
+stg_exposure_df = stg_exposure_df.reset_index()
+
+# Remove blank corporate names
+stg_exposure_df = stg_exposure_df[
+    stg_exposure_df["Corporate Name"].notna()
+]
+
+st.write("STG Exposure Report Shape:", stg_exposure_df.shape)
+
+st.dataframe(stg_exposure_df.head(10))
